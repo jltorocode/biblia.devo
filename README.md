@@ -4,7 +4,7 @@ App web (PWA) que entrega versículos bíblicos según tu estado de ánimo. Adem
 
 Proyecto **open source (MIT)** y **self-hostable**: no depende de servicios propietarios de auth ni de email. Cualquiera puede clonarlo, desplegarlo y adaptarlo.
 
-> ⚠️ **Seguridad**: este README no lleva credenciales reales, API keys, contraseñas ni IPs. Todo lo que aparece entre `<...>` es un placeholder. Los secretos van **solo** en `.env` / `.env.production`, que están en `.gitignore`.
+> ⚠️ **Seguridad**: el repositorio es **público**. Este README no lleva credenciales reales, API keys, contraseñas ni IPs. Todo lo que aparece entre `<...>` es un placeholder. Los secretos van **solo** en `.env` / `.env.production`, que están en `.gitignore`. Detalles en [Seguridad](#seguridad).
 
 ---
 
@@ -16,19 +16,20 @@ Proyecto **open source (MIT)** y **self-hostable**: no depende de servicios prop
 4. [Requisitos](#requisitos)
 5. [Puesta en marcha local](#puesta-en-marcha-local)
 6. [Variables de entorno](#variables-de-entorno)
-7. [Base de datos y seeds](#base-de-datos-y-seeds)
-8. [Scripts npm](#scripts-npm)
-9. [Tests](#tests)
-10. [Autenticación](#autenticación)
-11. [Pagos y premium](#pagos-y-premium)
-12. [Emails y tareas programadas](#emails-y-tareas-programadas)
-13. [Versiones de la Biblia](#versiones-de-la-biblia)
-14. [Búsqueda semántica (embeddings)](#búsqueda-semántica-embeddings)
-15. [Redis (opcional)](#redis-opcional)
-16. [API / endpoints](#api--endpoints)
-17. [Deploy en producción](#deploy-en-producción)
-18. [Decisiones de diseño](#decisiones-de-diseño)
-19. [Licencia](#licencia)
+7. [Seguridad](#seguridad)
+8. [Base de datos y seeds](#base-de-datos-y-seeds)
+9. [Scripts npm](#scripts-npm)
+10. [Tests](#tests)
+11. [Autenticación](#autenticación)
+12. [Pagos y premium](#pagos-y-premium)
+13. [Emails y tareas programadas](#emails-y-tareas-programadas)
+14. [Versiones de la Biblia](#versiones-de-la-biblia)
+15. [Búsqueda semántica (embeddings)](#búsqueda-semántica-embeddings)
+16. [Redis (opcional)](#redis-opcional)
+17. [API / endpoints](#api--endpoints)
+18. [Deploy en producción](#deploy-en-producción)
+19. [Decisiones de diseño](#decisiones-de-diseño)
+20. [Licencia](#licencia)
 
 ---
 
@@ -142,7 +143,7 @@ Dockerfile · docker-compose.yml (dev) · docker-compose.prod.yml (prod)
 
 ## Requisitos
 
-- Node.js 20+
+- Node.js 24 (LTS), la misma versión que usa la imagen Docker (`node:24-alpine`). El lockfile está generado con npm 11: con el npm de Node 20, `npm ci` lo rechaza
 - Docker + Docker Compose
 - (Opcional) Redis
 - (Opcional) Cuenta en scripture.api.bible para versiones extra
@@ -201,6 +202,98 @@ La plantilla es `.env.example`. **Nunca commitees `.env` ni `.env.production`.**
 
 `instrumentation.ts` llama a `lib/env.ts` al arrancar. **En producción la app no arranca** si falta una variable crítica, y el error dice cuál. En desarrollo solo muestra un warning.
 
+> Las variables `NEXT_PUBLIC_*` se incrustan en el JavaScript que descarga el navegador. Solo pueden llevar valores públicos (la URL de la app, la *publishable key* de Stripe). **Nunca pongas un secreto con el prefijo `NEXT_PUBLIC_`.**
+
+---
+
+## Seguridad
+
+El repositorio es **público**. Regla: en git no entra nada que permita entrar a tu infraestructura o identificarla. Eso incluye credenciales, API keys, IPs, hostnames internos y datos personales. En el código, los comentarios y la documentación se usan placeholders: `<ip-postgres-ct>`, `<pass>`, `<tu-dominio>`, `tu-email@ejemplo.com`.
+
+### Dónde vive cada secreto
+
+| Ubicación | Qué contiene | Protección |
+|---|---|---|
+| `.env` (tu máquina) | Variables de desarrollo | Ignorado por git |
+| `.env.production` (host de la app, `/opt/devocional`) | Todas las variables de producción | Ignorado por git · `chmod 600` |
+| `/etc/devocional/cron.env` (host del timer) | `CRON_SECRET`, `APP_URL` | Fuera del repo · `chmod 600` |
+| Dashboards (Stripe, MercadoPago, PayPal, Cloudflare, SMTP) | Las claves originales | Tu cuenta en cada servicio |
+
+`.env.example` es el único archivo de entorno que se commitea, y solo lleva nombres de variables y placeholders.
+
+### Qué protege el proyecto
+
+| Riesgo | Protección | Dónde |
+|---|---|---|
+| Commitear un `.env` | `.gitignore` ignora `.env*` salvo `.env.example` | `.gitignore` |
+| Commitear certificados, claves o backups | Se ignoran `*.pem`, `*.key`, `*.p12`, `*.pfx`, `cron.env`, `*.dump`, `*.sql.gz` y `/backups` | `.gitignore` |
+| Secretos dentro de las imágenes Docker | `.dockerignore` excluye todos los `.env*`, así que ninguna etapa los lleva (ni `builder` ni la imagen del seed). La URL pública entra como build arg y el resto de las variables, en runtime, por `env_file`. Además, el Dockerfile borra cualquier `.env*` de `.next/standalone` | `.dockerignore`, `Dockerfile`, `docker-compose.prod.yml` |
+| IP/host de la DB en respuestas HTTP | Prisma incluye host y puerto en sus errores. `/api/health` y las Server Actions devuelven un mensaje genérico y el detalle se queda en el log del servidor | `app/api/health/route.ts`, `actions/*.ts` |
+| Respuestas crudas de los providers de pago en el navegador | El checkout y la cancelación devuelven mensajes genéricos y loguean el error real | `actions/pagos.ts` |
+| Usuarios demo (contraseñas públicas) en producción | `seed-usuarios-demo.ts` aborta si `NODE_ENV=production`, y el contenedor de la app la tiene | `prisma/seed/seed-usuarios-demo.ts` |
+| Postgres de desarrollo accesible desde la red local | Se publica solo en `127.0.0.1:5433` | `docker-compose.yml` |
+| Secretos débiles o ausentes en producción | `BETTER_AUTH_SECRET` y `CRON_SECRET` deben tener ≥ 16 caracteres; sin ellos la app no arranca | `lib/env.ts` |
+| Endpoints de cron abiertos | Requieren `Authorization: Bearer $CRON_SECRET` y tienen rate limit | `app/api/cron/*` |
+
+**Docker, en detalle:** el build no consulta la DB. La única variable que necesita es `NEXT_PUBLIC_APP_URL`, que es pública y Next incrusta en `robots.txt`, `sitemap.xml` y la metadata. `docker-compose.prod.yml` la pasa como build arg, interpolándola desde `.env`. Por eso en el host se crea una vez el symlink `ln -s .env.production .env`. Si falta, compose aborta con un mensaje que lo indica. Ni `.env` ni `.env.production` entran al contexto de build. Para comprobar que una imagen está limpia:
+
+```bash
+for img in devocional/app:latest devocional/seed:latest; do
+  docker run --rm --entrypoint sh "$img" -c 'find / -name ".env*" -not -path "/proc/*" 2>/dev/null | grep -v "\.env\.example$"'
+done
+# sin salida = ninguna imagen lleva .env
+```
+
+### Contraseñas que sí están en el repo (y por qué es aceptable)
+
+| Valor | Dónde | Por qué no es un problema |
+|---|---|---|
+| `devocional_local` | `docker-compose.yml`, `.env.example` | Solo es la DB de desarrollo, publicada en `127.0.0.1`. **Nunca la uses en producción.** |
+| `demo1234`, `premium1234`, `pastor1234` | `prisma/seed/seed-usuarios-demo.ts` | Usuarios demo locales. El script se niega a correr en producción |
+| `minimo8caracteres`, `postgresql://u:p@localhost…` | Tests | Datos de prueba sin valor fuera de los tests |
+
+### IPs e infraestructura
+
+- No escribas IPs reales en el código, la documentación, los comentarios ni los mensajes de commit. Usa `<ip-postgres-ct>` o `<ip-app-ct>`.
+- Las IPs internas solo viven en `.env.production` (`DATABASE_URL`, `REDIS_URL`), en `/etc/devocional/cron.env` si apuntas al CT directamente, y en la config de Cloudflare o Proxmox.
+- **Postgres:** `pg_hba.conf` solo debe aceptar la IP del CT de la app. El 5432 nunca se expone a internet.
+- **App:** el puerto 3000 solo debe ser accesible desde la red interna o desde `cloudflared`. Si `cloudflared` corre en el mismo CT, publica `127.0.0.1:3000:3000`.
+- **Cloudflare Tunnel:** el servidor no abre puertos a internet y su IP pública no aparece en el DNS.
+- **Logs:** los errores con detalle (host de la DB, respuestas de providers) quedan en `docker compose -f docker-compose.prod.yml logs app`. Límpialos antes de pegarlos en un issue público.
+
+### Antes de cada push
+
+```bash
+git status            # ¿aparece algún .env, .pem, dump…? No lo agregues
+git diff --cached     # revisa lo que vas a commitear
+
+# Busca IPs, keys de pago, claves privadas y URLs con usuario:password en lo staged
+git diff --cached -U0 \
+  | grep -nE '([0-9]{1,3}\.){3}[0-9]{1,3}|sk_live_|rk_live_|whsec_|APP_USR-|-----BEGIN|://[^ /:]+:[^ /@]+@' \
+  | grep -vE '127\.0\.0\.1|0\.0\.0\.0'
+# Sin salida = limpio
+```
+
+Para algo más completo, [gitleaks](https://github.com/gitleaks/gitleaks) escanea el historial (`gitleaks detect`) o solo lo staged (`gitleaks protect --staged`).
+
+### Si se filtra un secreto
+
+Borrarlo en un commit nuevo **no alcanza**: sigue en el historial, y en un repo público pueden existir forks y copias en caché. **Rótalo siempre**:
+
+| Secreto | Cómo rotarlo |
+|---|---|
+| Password de `DATABASE_URL` | `ALTER USER devocional WITH PASSWORD '<nueva>';` en el CT de Postgres y actualizar `.env.production` |
+| `BETTER_AUTH_SECRET` | Nuevo valor con `openssl rand -base64 32`. Invalida las sesiones activas (todos vuelven a iniciar sesión) |
+| `CRON_SECRET` | Nuevo valor en `.env.production` **y** en `/etc/devocional/cron.env` |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Dashboard de Stripe → Developers → API keys (*roll key*) / Webhooks (*roll secret*) |
+| `MERCADOPAGO_ACCESS_TOKEN` | Panel de desarrolladores de MercadoPago → Credenciales → renovar |
+| `PAYPAL_CLIENT_SECRET` | developer.paypal.com → Apps & Credentials → generar un secret nuevo y desactivar el viejo |
+| `SMTP_PASS` | Cambiar la contraseña en tu servidor de correo |
+| `BIBLE_API_KEY` | Regenerar en scripture.api.bible |
+| Token de Cloudflare Tunnel | Zero Trust → Tunnels → rotar el token y reinstalar `cloudflared` |
+
+Después de rotar: `docker compose -f docker-compose.prod.yml up -d` para recargar las variables. Si además quieres sacar el valor del historial, usa `git filter-repo` y haz force push. Eso reescribe todos los commits, así que coordínalo antes con quien tenga clones.
+
 ---
 
 ## Base de datos y seeds
@@ -210,6 +303,13 @@ La plantilla es `.env.example`. **Nunca commitees `.env` ni `.env.production`.**
 - Los IDs de usuario son UUID generados por Postgres (`gen_random_uuid()`).
 - `versiculos.texto_busqueda` es un `tsvector` con índice GIN (creado en una migración SQL raw).
 - `versiculos.embedding` es un `vector(384)` de pgvector.
+
+> **Migración renombrada:** `20260517000025_suscripciones_unique` pasó a llamarse `20260517025800_suscripciones_unique`. Con el nombre viejo corría antes que `init`, y en una DB vacía `prisma migrate deploy` fallaba con `relation "suscripciones" does not exist`. El SQL no cambió. Si tu DB local ya la tenía aplicada con el nombre viejo, actualiza el registro una vez para que Prisma no detecte drift:
+>
+> ```bash
+> docker exec -i devocional_postgres psql -U devocional -d devocional -c \
+>   "UPDATE _prisma_migrations SET migration_name = '20260517025800_suscripciones_unique' WHERE migration_name = '20260517000025_suscripciones_unique';"
+> ```
 
 ### Scripts de seed
 
@@ -224,6 +324,8 @@ La plantilla es `.env.example`. **Nunca commitees `.env` ni `.env.production`.**
 | `npx tsx prisma/seed/seed-intent-embeddings.ts` | Regenera `datos/intent-embeddings.json` |
 | `npx tsx prisma/seed/seed-usuarios-demo.ts [--reset]` | Usuarios demo con diario poblado (**solo dev**) |
 | `npx tsx prisma/seed/promover-admin.ts <email>` | Da `rol = 'admin'` a un usuario ya registrado |
+
+En producción, los seeds corren con el servicio `seed` del compose: `docker compose -f docker-compose.prod.yml run --rm seed [comando]`. Sin comando, ejecuta `prisma/seed/index.ts`.
 
 ---
 
@@ -333,7 +435,7 @@ Sin Redis todo sigue funcionando contra Postgres. Si Redis falla, el rate limit 
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/health` | Healthcheck: `{"ok":true,"db":"ok"}` |
+| `GET` | `/api/health` | Healthcheck: `{"ok":true,"db":"ok"}`, o `503 {"ok":false,"db":"down"}` sin detalles (el error real va al log) |
 | `*` | `/api/auth/*` | better-auth |
 | `GET`/`POST` | `/api/cron/recordatorios` | Envía recordatorios (Bearer `CRON_SECRET`) |
 | `GET`/`POST` | `/api/cron/diario-mensual` | Envía el resumen mensual (Bearer `CRON_SECRET`) |
@@ -365,12 +467,16 @@ Resumen:
 git clone <repo-url> /opt/devocional && cd /opt/devocional
 cp .env.example .env.production && chmod 600 .env.production
 #   → rellenar con valores reales (DATABASE_URL apunta a tu Postgres)
+ln -s .env.production .env
+#   → compose lee .env para pasar NEXT_PUBLIC_APP_URL como build arg
 
 docker compose -f docker-compose.prod.yml up -d --build
-#   El contenedor corre `prisma migrate deploy` antes de `node server.js`
+#   El build no toca la DB. Al arrancar, el contenedor corre
+#   `prisma migrate deploy` (sobre una DB vacía también) y luego `node server.js`
 
 # Seed inicial (solo la primera vez)
-docker compose -f docker-compose.prod.yml exec app sh -c "npx tsx prisma/seed/index.ts"
+docker compose -f docker-compose.prod.yml run --rm seed
+docker compose -f docker-compose.prod.yml run --rm seed npx tsx prisma/seed/seed-planes.ts
 
 # Smoke test
 curl -fsS https://<tu-dominio>/api/health
@@ -384,6 +490,16 @@ curl -fsS https://<tu-dominio>/api/health
 
 ### Checklist antes de lanzar
 
+**Seguridad** (ver [Seguridad](#seguridad))
+- [ ] `.env.production` con `chmod 600` y secretos generados con `openssl rand -base64 32`
+- [ ] Contraseña de Postgres de producción propia (nunca `devocional_local`)
+- [ ] `pg_hba.conf` solo acepta la IP del CT de la app; el 5432 no se ve desde internet
+- [ ] El puerto 3000 solo es accesible desde la red interna o desde `cloudflared`
+- [ ] `/etc/devocional/cron.env` con `chmod 600`
+- [ ] No correr `seed-usuarios-demo.ts` en producción (el script lo bloquea)
+- [ ] La imagen final no contiene `.env` (comando en [Seguridad](#seguridad))
+
+**Producto**
 - [ ] Reemplazar los iconos PNG placeholder de `public/icons/`
 - [ ] Poner el email de contacto real en `/privacidad` y `/terminos`
 - [ ] Configurar SMTP y probar el email de bienvenida
@@ -420,7 +536,7 @@ Issues y merge requests son bienvenidos. Antes de enviar un cambio:
 npm run lint && npm test && npm run build
 ```
 
-No incluyas secretos en commits. Usa `.env` (ignorado por git) y documenta las variables nuevas en `.env.example` sin valores reales.
+No incluyas secretos, IPs ni datos personales en commits. Usa `.env` (ignorado por git), documenta las variables nuevas en `.env.example` sin valores reales y pasa el chequeo de [Antes de cada push](#antes-de-cada-push).
 
 ### Licencias del contenido bíblico
 
@@ -436,4 +552,3 @@ La licencia MIT cubre **solo el código**. Cada texto bíblico conserva su propi
 > No agregues al repo ni a los scripts de seed traducciones con copyright. Si necesitas una, consúmela a través de una API que tenga licencia (scripture.api.bible) y respeta sus términos de uso.
 
 Las clasificaciones (`datos/clasificacion.csv`), las preguntas de trivia, la timeline y los textos propios de la app forman parte del proyecto y se distribuyen bajo MIT.
-# biblia.devo

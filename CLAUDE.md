@@ -11,7 +11,7 @@ App de versículos bíblicos según el estado de ánimo. Stack 100% open source 
 - Prisma 6.19 + `@prisma/client`
 - **better-auth** 1.6 (NO Clerk — el usuario quiere todo libre y tiene servidores propios)
 - Stripe / MercadoPago / PayPal SDKs (sin keys configuradas aún)
-- Vitest 4.x — 5 archivos / 48 tests verdes
+- Vitest 4.x — 14 archivos / 97 tests verdes
 - Biblia: Reina-Valera 1909 (dominio público, `scrollmapper/bible_databases`)
 
 ## Comandos
@@ -51,6 +51,8 @@ npm run build         # next build
 8. **`Premium hasta`**: solo se mantiene si `status='active'` o `(status='canceled' && cancelAtPeriodEnd)`. Expirada/pago fallido → `null`.
 9. **Email transaccional**: el usuario va a usar **SMTP propio** (Nodemailer). Placeholders en `.env`. Nada de Resend.
 10. **PayPal SDK v2**: el controller de subscriptions no está estable, así que el provider habla directo a la REST API.
+11. **Repo público → cero secretos/IPs/datos personales en git**: placeholders `<ip-…>`, `<pass>`, `tu-email@ejemplo.com`. Errores internos (Prisma trae host/IP de la DB) se loguean y al cliente va un mensaje genérico. `.dockerignore` excluye todos los `.env*`: ninguna imagen lleva secretos. Todo documentado en README → Seguridad.
+12. **Docker build sin DB**: ninguna página se prerenderiza contra la DB (el layout raíz consulta la DB vía `HeaderUsuario`, así que `/timeline` y `/trivia` son `force-dynamic`). El build solo recibe `NEXT_PUBLIC_APP_URL` como build arg (compose lo interpola desde el symlink `.env → .env.production`). Imagen en `node:24-alpine` (el lockfile es de npm 11). El CLI `prisma` va instalado global en el runner (standalone no trae su bin). Seeds en prod: servicio `seed` del compose (etapa `builder`).
 
 ## Estado de servicios al cerrar la sesión
 
@@ -62,7 +64,7 @@ npm run build         # next build
 
 1. Levantar Postgres si bajó: `npm run db:up`
 2. Arrancar dev: `npx next dev --port 3010`
-3. Verificar verde: `npm test` (espera 62 verdes) + `npm run build`
+3. Verificar verde: `npm test` (espera 97 verdes, 14 archivos) + `npm run build`
 
 ### Topología de deploy (la real del usuario)
 
@@ -84,9 +86,9 @@ Internet → Cloudflare Tunnel → CT-app (Docker, :3000)
 **Deploy real**. Seguir `deploy/README.md`:
 1. CT-postgres: crear user+DB `devocional`, abrir `pg_hba.conf` al CT-app
 2. CT-app: instalar Docker (asegurar `nesting=1` + `keyctl=1` en el CT)
-3. `git clone` en `/opt/devocional`, llenar `.env.production` (incluye `DATABASE_URL` apuntando al CT-postgres)
-4. `docker compose -f docker-compose.prod.yml up -d --build`
-5. Seed: `docker compose ... exec app sh -c "npx tsx prisma/seed/index.ts"`
+3. `git clone` en `/opt/devocional`, llenar `.env.production` (incluye `DATABASE_URL` apuntando al CT-postgres) y `ln -s .env.production .env`
+4. `docker compose -f docker-compose.prod.yml up -d --build` (migra solo, también sobre DB vacía)
+5. Seed: `docker compose -f docker-compose.prod.yml run --rm seed` (+ `… run --rm seed npx tsx prisma/seed/seed-planes.ts`)
 6. Cloudflare Tunnel → public hostname `devocional.app` → `http://<ip-app-ct>:3000`
 7. systemd timer (`deploy/recordatorios.timer`) para cron horario
 8. Smoke: `curl https://devocional.app/api/health`

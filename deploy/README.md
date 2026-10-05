@@ -23,6 +23,11 @@ Topología asumida (Proxmox):
 
 Reemplaza `devocional.app` por tu dominio real.
 
+> **Seguridad:** el repo es público. Las IPs, contraseñas y tokens reales van **solo** en
+> `.env.production` y `/etc/devocional/cron.env` (ambos `chmod 600`, fuera de git). Nunca los
+> escribas en este archivo, en comentarios ni en commits. Qué protege el proyecto, el chequeo antes
+> de cada push y cómo rotar un secreto filtrado: [README → Seguridad](../README.md#seguridad).
+
 ## 1. Postgres CT — preparar la DB (una sola vez)
 
 Conectado al CT de Postgres:
@@ -36,7 +41,7 @@ GRANT ALL PRIVILEGES ON DATABASE devocional TO devocional;
 EOF
 ```
 
-Asegúrate que `postgresql.conf` escuche en la IP del CT (o `0.0.0.0`) y que `pg_hba.conf` permita conexión desde la IP del CT de la app. Reiniciar el servicio.
+Asegúrate que `postgresql.conf` escuche en la IP del CT (o `0.0.0.0`) y que `pg_hba.conf` permita conexión **solo** desde la IP del CT de la app (una línea `host devocional devocional <ip-app-ct>/32 scram-sha-256`, no `0.0.0.0/0`). Reiniciar el servicio. El 5432 no debe ser accesible desde internet.
 
 ## 2. CT de la app — Docker + clonar repo
 
@@ -57,6 +62,7 @@ cd /opt/devocional
 ```bash
 cp .env.example .env.production
 chmod 600 .env.production
+ln -s .env.production .env   # compose lo lee para el build arg NEXT_PUBLIC_APP_URL
 ```
 
 Completa todo:
@@ -94,6 +100,11 @@ PAYPAL_PLAN_PREMIUM_ANUAL=...
 
 `instrumentation.ts` valida estas vars en boot — si falta algo crítico la app se cae con un error claro.
 
+> Ningún `.env` entra a las imágenes: `.dockerignore` los excluye. El build no toca la DB y solo
+> recibe `NEXT_PUBLIC_APP_URL` como build arg (por eso el symlink `.env`). Todo lo demás entra en
+> runtime por `env_file`. Si falta el symlink, compose aborta con
+> `falta NEXT_PUBLIC_APP_URL (ejecuta ln -s .env.production .env)`.
+
 ## 4. Build + start
 
 ```bash
@@ -101,12 +112,21 @@ docker compose -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.prod.yml logs -f app
 ```
 
-El entrypoint corre `prisma migrate deploy` antes de levantar el server.
+El contenedor corre `prisma migrate deploy` antes de levantar el server. Funciona contra una DB vacía, así que no hace falta preparar el esquema a mano.
 
-Cuando esté arriba, sembrar la Biblia + estados + clasificación (solo la primera vez):
+Cuando esté arriba, sembrar la Biblia + estados + clasificación y los planes de lectura (solo la primera vez):
 
 ```bash
-docker compose -f docker-compose.prod.yml exec app sh -c "npx tsx prisma/seed/index.ts"
+docker compose -f docker-compose.prod.yml run --rm seed
+docker compose -f docker-compose.prod.yml run --rm seed npx tsx prisma/seed/seed-planes.ts
+```
+
+El servicio `seed` usa la etapa `builder` del Dockerfile (código + `tsx`), porque la imagen final no trae los scripts de seed. No arranca con `up`. `seed-usuarios-demo.ts` está bloqueado en producción.
+
+Para promover tu usuario a admin, después de registrarte en `/signup`:
+
+```bash
+docker compose -f docker-compose.prod.yml run --rm seed npx tsx prisma/seed/promover-admin.ts tu-email@ejemplo.com
 ```
 
 ## 5. Cloudflare Tunnel
@@ -172,6 +192,8 @@ docker compose -f docker-compose.prod.yml up -d --build
 ```bash
 curl -fsS https://devocional.app/api/health
 # {"ok":true,"db":"ok"}  ← confirma que la app habla con Postgres
+# Si responde 503 {"ok":false,"db":"down"}, el motivo real (sin exponerlo al público) está en:
+#   docker compose -f docker-compose.prod.yml logs app | grep '\[health\]'
 
 curl -fsS -o /dev/null -w "%{http_code}\n" \
   -H "Authorization: Bearer $CRON_SECRET" \
