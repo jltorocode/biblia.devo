@@ -11,7 +11,9 @@ import {
 } from "@/lib/timeline-biblica";
 import { LIBROS_POR_CODIGO } from "@/lib/libros";
 
-export const dynamic = "force-static";
+// Dinamica: el layout raiz consulta la DB (HeaderUsuario) y lee cookies/sesion.
+// Estatica, el build fallaba con la DB vacia y el header quedaba congelado.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Línea de tiempo bíblica · De Génesis a Apocalipsis",

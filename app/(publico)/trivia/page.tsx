@@ -4,7 +4,9 @@ import { Sparkles, BookOpen, Zap, Clock, Heart } from "lucide-react";
 import { LIBROS } from "@/lib/libros";
 import { conteoPorLibro, statsTrivia, PREGUNTAS_POR_RONDA } from "@/lib/trivia";
 
-export const dynamic = "force-static";
+// Dinamica: el layout raiz consulta la DB (HeaderUsuario) y lee cookies/sesion.
+// Estatica, el build fallaba con la DB vacia y el header quedaba congelado.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Trivia bíblica · ¿Cuánto sabés?",

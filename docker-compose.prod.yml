@@ -12,12 +12,18 @@
 #   CRON_SECRET=...          (openssl rand -base64 32)
 #   SMTP_*=...
 #   STRIPE_/MERCADOPAGO_/PAYPAL_=...
+#
+# Una sola vez, en el directorio del repo: `ln -s .env.production .env`.
+# Compose lee `.env` para interpolar ${NEXT_PUBLIC_APP_URL} en los build args.
+# (.env no entra a la imagen: .dockerignore excluye todos los .env*.)
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:?falta NEXT_PUBLIC_APP_URL (ejecuta ln -s .env.production .env)}"
     image: devocional/app:latest
     container_name: devo_app
     restart: unless-stopped
@@ -26,8 +32,9 @@ services:
     environment:
       NODE_ENV: production
     # Migraciones al arrancar + server. Si fallan las migraciones, el container
-    # se cae y restart unless-stopped reintenta.
-    command: sh -c "npx prisma migrate deploy && node server.js"
+    # se cae y restart unless-stopped reintenta. `prisma` es el CLI global que
+    # instala el Dockerfile (con npx no se encuentra el bin en standalone).
+    command: sh -c "prisma migrate deploy && node server.js"
     ports:
       # 3000 escuchando en todas las interfaces del CT — el firewall del CT
       # (o de Proxmox) deberia limitar el acceso a la red interna + cloudflared.
@@ -43,3 +50,25 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # Seeds (libros, Biblia, estados, clasificacion, planes…). No arranca con `up`;
+  # se corre a mano:
+  #   docker compose -f docker-compose.prod.yml run --rm seed
+  #   docker compose -f docker-compose.prod.yml run --rm seed npx tsx prisma/seed/seed-planes.ts
+  # La imagen final no trae tsx ni el codigo de los seeds, asi que usa la etapa
+  # `builder` del Dockerfile (codigo + node_modules completos, sin ningun .env).
+  seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: builder
+      args:
+        NEXT_PUBLIC_APP_URL: "${NEXT_PUBLIC_APP_URL:?falta NEXT_PUBLIC_APP_URL (ejecuta ln -s .env.production .env)}"
+    image: devocional/seed:latest
+    profiles: ["seed"]
+    env_file:
+      - .env.production
+    environment:
+      # Bloquea seed-usuarios-demo.ts (contraseñas publicas).
+      NODE_ENV: production
+    command: npx tsx prisma/seed/index.ts

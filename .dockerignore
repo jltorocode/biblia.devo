@@ -1,9 +1,14 @@
 node_modules
 .next
 .git
-.env
-.env.local
-.env.*.local
+# Ningun .env entra a la imagen (ni a la etapa builder). Las vars llegan en
+# runtime por `env_file`; la URL publica del build, por build arg.
+.env*
+!.env.example
+*.pem
+*.key
+*.dump
+*.sql.gz
 npm-debug.log
 README.md
 .vscode
