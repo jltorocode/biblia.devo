@@ -66,7 +66,9 @@ export async function pedirVersiculoAction(input: {
       },
     };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Error inesperado" };
+    // Errores de Prisma pueden incluir host/IP de la DB: solo al log.
+    console.error("[devocional] pedirVersiculo", err);
+    return { ok: false, error: "Error inesperado" };
   }
 }
 

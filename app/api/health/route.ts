@@ -8,9 +8,9 @@ export async function GET() {
     await prisma.$queryRaw`SELECT 1`;
     return NextResponse.json({ ok: true, db: "ok" });
   } catch (err) {
-    return NextResponse.json(
-      { ok: false, db: "down", error: err instanceof Error ? err.message : "unknown" },
-      { status: 503 },
-    );
+    // Endpoint publico: el mensaje de Prisma incluye host/IP y puerto de la DB,
+    // asi que el detalle solo va al log del servidor.
+    console.error("[health] db down", err);
+    return NextResponse.json({ ok: false, db: "down" }, { status: 503 });
   }
 }

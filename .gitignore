@@ -34,6 +34,18 @@ yarn-error.log*
 .env*
 !.env.example
 
+# secretos, certificados y backups — nunca al repo (ver README → Seguridad)
+*.key
+*.p12
+*.pfx
+cron.env
+*.dump
+*.sql.gz
+/backups
+
+# config local de Claude Code (rutas y permisos de tu maquina)
+.claude/settings.local.json
+
 # vercel
 .vercel
 

@@ -8,7 +8,9 @@ services:
       POSTGRES_PASSWORD: devocional_local
       POSTGRES_DB: devocional
     ports:
-      - "5433:5432"
+      # Solo localhost: la contraseña de dev es publica (esta en el repo), asi
+      # que la DB no debe quedar accesible desde la red local.
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

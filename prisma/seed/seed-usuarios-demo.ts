@@ -6,6 +6,9 @@
  * Uso: `npx tsx prisma/seed/seed-usuarios-demo.ts --reset`
  *
  * Sin --reset: si el email ya existe lo deja intacto (sin re-poblar).
+ *
+ * SOLO DESARROLLO: las contraseñas de abajo son públicas (están en el repo).
+ * Con NODE_ENV=production (el contenedor de la app lo tiene) el script aborta.
  */
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
@@ -272,6 +275,10 @@ async function sembrarDiario(usuarioId: string) {
 }
 
 async function main() {
+  if (process.env.NODE_ENV === "production") {
+    console.error("× seed-usuarios-demo no corre en produccion: sus contraseñas son publicas.");
+    process.exit(1);
+  }
   const reset = process.argv.includes("--reset");
   console.log(`→ Seed usuarios demo${reset ? " (reset)" : ""}`);
   for (const u of DEMOS) {

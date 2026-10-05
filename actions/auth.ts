@@ -48,7 +48,9 @@ export async function signUpAction(input: {
     if (/already|exists|registered/i.test(msg)) {
       return { ok: false, error: "Ya existe una cuenta con ese email" };
     }
-    return { ok: false, error: msg };
+    // Cualquier otro error (DB caida, etc.) puede exponer detalles internos.
+    console.error("[auth] signUp", err);
+    return { ok: false, error: "No se pudo crear la cuenta" };
   }
 }
 

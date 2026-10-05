@@ -45,10 +45,10 @@ export async function iniciarCheckoutAction(input: {
     });
     url = result.url;
   } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "No pudimos crear el checkout",
-    };
+    // El error del provider puede traer respuestas crudas de su API o nombres
+    // de config — al log, no al navegador.
+    console.error("[pagos] checkout", err);
+    return { ok: false, error: "No pudimos crear el checkout" };
   }
 
   redirect(url);
@@ -77,10 +77,8 @@ export async function cancelarSuscripcionAction(): Promise<
     const provider = getProvider(sub.provider as ProviderName);
     await provider.cancelarSuscripcion(sub.externalId);
   } catch (err) {
-    return {
-      ok: false,
-      error: err instanceof Error ? err.message : "El provider no acepto la cancelacion",
-    };
+    console.error("[pagos] cancelar", err);
+    return { ok: false, error: "El provider no acepto la cancelacion" };
   }
 
   // Optimista: marcamos cancel_at_period_end localmente; el webhook confirmara.
