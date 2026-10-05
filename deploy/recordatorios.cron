@@ -1,0 +1,9 @@
+# Alternativa a systemd: linea de crontab del usuario que corra el cron.
+# Editar con: crontab -e
+
+# Vars (ajusta el path si no esta en /etc/devocional/cron.env):
+CRON_SECRET=ponme-aqui
+APP_URL=https://devocional.app
+
+# Cada hora en el minuto 0.
+0 * * * * /usr/bin/curl -sS --max-time 60 --fail -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/recordatorios" >> /var/log/devocional-cron.log 2>&1

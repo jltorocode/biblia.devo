@@ -1,0 +1,11 @@
+[Unit]
+Description=Devocional — timer dia 1 a las 09:00 UTC para resumen mensual
+
+[Timer]
+# Primero del mes, 09:00 UTC.
+OnCalendar=*-*-01 09:00:00 UTC
+Persistent=true
+Unit=diario-mensual.service
+
+[Install]
+WantedBy=timers.target

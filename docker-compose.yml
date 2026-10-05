@@ -1,0 +1,21 @@
+services:
+  postgres:
+    # Imagen con pgvector pre-instalado — necesario para embeddings semanticos.
+    image: pgvector/pgvector:pg16
+    container_name: devocional_postgres
+    environment:
+      POSTGRES_USER: devocional
+      POSTGRES_PASSWORD: devocional_local
+      POSTGRES_DB: devocional
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devocional -d devocional"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

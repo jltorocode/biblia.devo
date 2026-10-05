@@ -1,0 +1,45 @@
+# Topologia asumida:
+#  - Postgres vive en otro CT del Proxmox (no en este compose).
+#  - Redis vive en otro CT (opcional, todavia no consumido por la app).
+#  - Cloudflare Tunnel apunta http://<ip-app-ct>:3000 → expone el dominio publico.
+#  - Este compose corre solo en el CT de la app.
+#
+# Variables que tienen que estar en `.env.production`:
+#   DATABASE_URL=postgresql://user:pass@<ip-postgres-ct>:5432/devocional?schema=public
+#   BETTER_AUTH_SECRET=...   (openssl rand -base64 32)
+#   BETTER_AUTH_URL=https://devocional.app
+#   NEXT_PUBLIC_APP_URL=https://devocional.app
+#   CRON_SECRET=...          (openssl rand -base64 32)
+#   SMTP_*=...
+#   STRIPE_/MERCADOPAGO_/PAYPAL_=...
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: devocional/app:latest
+    container_name: devo_app
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+    # Migraciones al arrancar + server. Si fallan las migraciones, el container
+    # se cae y restart unless-stopped reintenta.
+    command: sh -c "npx prisma migrate deploy && node server.js"
+    ports:
+      # 3000 escuchando en todas las interfaces del CT — el firewall del CT
+      # (o de Proxmox) deberia limitar el acceso a la red interna + cloudflared.
+      # Si cloudflared corre en este mismo CT, puedes restringir a 127.0.0.1:3000.
+      - "3000:3000"
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

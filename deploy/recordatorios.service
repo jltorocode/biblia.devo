@@ -1,0 +1,15 @@
+[Unit]
+Description=Devocional — disparo del cron de recordatorios diarios
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Cargamos las vars desde un fichero protegido (CRON_SECRET, APP_URL).
+EnvironmentFile=/etc/devocional/cron.env
+ExecStart=/usr/bin/curl -sS --max-time 60 --fail \
+  -H "Authorization: Bearer ${CRON_SECRET}" \
+  "${APP_URL}/api/cron/recordatorios"
+
+# Nunca reintentar si falla — la proxima ejecucion del timer lo retoma.
+Restart=no

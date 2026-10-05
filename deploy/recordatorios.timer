@@ -1,0 +1,12 @@
+[Unit]
+Description=Devocional — timer horario para recordatorios
+
+[Timer]
+# Al inicio de cada hora.
+OnCalendar=hourly
+# Si la maquina estuvo apagada, dispara en cuanto arranque.
+Persistent=true
+Unit=recordatorios.service
+
+[Install]
+WantedBy=timers.target

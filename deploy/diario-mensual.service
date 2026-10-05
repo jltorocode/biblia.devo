@@ -1,0 +1,12 @@
+[Unit]
+Description=Devocional — resumen mensual del diario (Premium)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/devocional/cron.env
+ExecStart=/usr/bin/curl -sS --max-time 600 --fail \
+  -H "Authorization: Bearer ${CRON_SECRET}" \
+  "${APP_URL}/api/cron/diario-mensual"
+Restart=no
